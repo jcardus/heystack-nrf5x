@@ -21,6 +21,11 @@ wget -q https://developer.nordicsemi.com/nRF5_SDK/nRF5_SDK_v15.x.x/nRF5_SDK_15.3
 echo ">>> Extracting nRF5 SDK 15.3.0 to nrf-sdk directory..."
 unzip -q nRF5_SDK_15.3.0_59ac345.zip -d nrf-sdk
 
+sed -i 's|GNU_INSTALL_ROOT ?= .*|GNU_INSTALL_ROOT ?= ../../nrf-sdk/gcc-arm-none-eabi-6-2017-q2-update/bin/|' \
+nrf-sdk/nRF5_SDK_15.3.0_59ac345/components/toolchain/gcc/Makefile.posix
+
+
+
 echo ">>> Installing Nordic nRF Command Line Tools (v10.24.2)..."
 wget -q https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/desktop-software/nrf-command-line-tools/sw/versions-10-x-x/10-24-2/nrf-command-line-tools_10.24.2_amd64.deb
 sudo apt-get update
