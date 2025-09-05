@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source ../../venv/bin/activate
+
 # --- Config ---
 GEN_KEYS="../../tools/generate_keys.py"
 KEYS_DIR="./output"
