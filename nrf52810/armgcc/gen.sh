@@ -30,7 +30,7 @@ echo "📦 Building + flashing firmware for $DEVICE_ID..."
 make "$TARGET" ADV_KEYS_FILE="$KEYFILE"
 
 # --- Convert ELF → HEX ---
-HEX_FILE="$DEVICE_ID.hex"
+HEX_FILE="./output/$DEVICE_ID.hex"
 echo "📄 Converting ELF to HEX..."
 "$OBJCOPY" -O ihex "$ELF_FILE" "$HEX_FILE"
 
