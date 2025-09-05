@@ -147,9 +147,7 @@ help-msg::
 define flash_targets
 .PHONY: stflash-$(1)-patched bmpflash-$(1)-patched
 stflash-$(1)-patched: patched_$(1)
-	@echo flashing application and softdevice...␍
-	openocd -f openocd.cfg -c "init; halt; nrf51 mass_erase; program $(OUTPUT_DIRECTORY)/$(1)_$(SOFTDEVICE_MODEL)_patched.bin verify; reset; exit";
-
+	
 bmpflash-$(1)-patched: patched_$(1)
 	@printf "  BMP $$(BMP_PORT) (flash)\n"
 	$$(Q)$$(GDB) -nx --batch \
