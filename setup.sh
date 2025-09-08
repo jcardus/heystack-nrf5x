@@ -45,7 +45,7 @@ else
     sudo apt-get install -y ./nrf-command-line-tools_10.24.2_amd64.deb
 fi
 
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
