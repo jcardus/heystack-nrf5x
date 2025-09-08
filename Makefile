@@ -7,7 +7,7 @@ KEY_ROTATION_INTERVAL ?= 3600
 ADVERTISING_INTERVAL ?= 1000
 RANDOM_ROTATE_KEYS ?= 1
 
-GNU_INSTALL_ROOT ?= $(CURDIR)/nrf-sdk/gcc-arm-none-eabi-6-2017-q2-update
+GNU_INSTALL_ROOT ?= ../../nrf-sdk/gcc-arm-none-eabi-6-2017-q2-update/bin/
 
 
 TARGETS := \
