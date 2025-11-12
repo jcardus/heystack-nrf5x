@@ -86,10 +86,10 @@ $(foreach target,$(TARGETS),$(eval $(call build_target,$(target))))
 define patch_target
 patched_$(1): bin_$(1) $(ADV_KEYS_FILE)
 	@echo Patching $(1)
-	cp $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL).bin $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.bin
-	xxd -p -c 100000 $$(ADV_KEYS_FILE) | xxd -r -p | dd of=$$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.bin skip=1 bs=1 seek=$$(shell grep -oba OFFLINEFINDINGPUBLICKEYHERE! $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL).bin | cut -d ':' -f 1) conv=notrunc
-	xxd -p -c 100000 $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.bin | grep -q $$(shell echo -n ENDOFKEYSENDOFKEYSENDOFKEYS! | xxd -p -c 100) || (echo "The key was not patched correctly!"; exit 1)
-	$$(OBJCOPY) -I binary -O elf32-littlearm -B arm $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.bin $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.elf
+	python ../../tools/nrf-patch-log.py \
+    	  $(OUTPUT_DIRECTORY)/$(1)_$(SOFTDEVICE_MODEL).bin \
+    	  $(ADV_KEYS_FILE) \
+    	  $(OUTPUT_DIRECTORY)/$(1)_$(SOFTDEVICE_MODEL)_patched.bin
 
 help-msg::
 	@echo patched_$(1) - patch $(1) with keys from $(ADV_KEYS_FILE) for $(1)

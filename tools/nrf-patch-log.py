@@ -85,7 +85,7 @@ def tail_serial_with_timestamps(monitor_port, stop_event, flash_method):
             process = subprocess.Popen(
                 ['strtt', '-v', '2'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
-            
+
             while not stop_event.is_set():
                 output = process.stdout.readline()
                 if output:
@@ -199,7 +199,7 @@ def main():
             exit(1)
 
     # Convert the patched binary into an ELF file using objcopy
-    objcopy = 'arm-none-eabi-objcopy'  # Assumes 'arm-none-eabi-objcopy' is in the system's PATH
+    objcopy = '../../nrf-sdk/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-objcopy'
     try:
         subprocess.run([
             objcopy,
