@@ -35,3 +35,5 @@ echo "📄 Converting ELF to HEX..."
 "$OBJCOPY" -O ihex "$ELF_FILE" "$HEX_FILE"
 
 echo "✅ Done! Firmware ready: $HEX_FILE"
+
+ python3 ../../tools/check_key.py
