@@ -37,19 +37,24 @@ DEVICE_NAME = "HeyStack-Config"
 KEY_LENGTH = 28
 
 
-async def scan_for_devices(timeout: float = 10.0) -> list:
+async def scan_for_devices(timeout: float = 10) -> list:
     """Scan for HeyStack devices in configuration mode."""
     print(f"Scanning for '{DEVICE_NAME}' devices ({timeout}s)...")
 
     devices = []
+    detected = []
 
     def detection_callback(device, advertisement_data):
         if device.name and DEVICE_NAME in device.name:
             devices.append((device, advertisement_data))
+        else:
+            if device.address not in [d.address for d, _ in detected]:
+                detected.append((device, advertisement_data))
+                print(device)
 
     scanner = BleakScanner(detection_callback=detection_callback)
     await scanner.start()
-    await asyncio.sleep(timeout)
+    await asyncio.sleep(1000)
     await scanner.stop()
 
     return devices
@@ -196,7 +201,7 @@ async def main():
     parser.add_argument(
         "--timeout", "-t",
         type=float,
-        default=10.0,
+        default=100.0,
         help="Scan timeout in seconds (default: 10)"
     )
 

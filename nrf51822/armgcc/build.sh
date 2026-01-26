@@ -1,4 +1,3 @@
-make clean
 make stflash-nrf51822_xxac-dcdc HAS_DEBUG=1
 pkill openocd
 openocd -f openocd.cfg \
