@@ -1,4 +1,4 @@
-brew install arm-none-eabi-gcc
+brew install gcc-arm-embedded
 brew install openocd
 brew install nrfutil
 
