@@ -1,0 +1,12 @@
+# Example keys file for configure_device.py
+# Each line should be a 28-byte (56 hex character) public key
+# Lines starting with # are comments
+# Empty lines are ignored
+
+# Example key 1 (replace with your actual keys):
+0102030405060708091011121314151617181920212223242526272829
+
+# Example key 2:
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+# You can generate keys using OpenHaystack or similar tools

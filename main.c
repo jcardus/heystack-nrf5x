@@ -52,6 +52,7 @@
 #include "app_timer.h"
 #include "app_button.h"
 #include "main.h"
+#include "config_service.h"
 #include "math.h"
 
 #if defined(BATTERY_LEVEL) && BATTERY_LEVEL == 1
@@ -62,14 +63,18 @@
 #endif
 #endif
 
-// Create space for MAX_KEYS public keys
-static const char public_key[MAX_KEYS+1][28] = {
+// Create space for MAX_KEYS public keys (non-const to allow runtime writes)
+static char public_key[MAX_KEYS+1][28] = {
     [0] = "OFFLINEFINDINGPUBLICKEYHERE!",
     [MAX_KEYS] = "ENDOFKEYSENDOFKEYSENDOFKEYS!",
 };
 
 int last_filled_index = -1;
 int current_index = 0;
+
+// Config mode timer
+APP_TIMER_DEF(m_config_mode_timer_id);
+#define CONFIG_MODE_TIMEOUT_MS  30000  // 30 seconds
 
 // Define timer ID variable
 APP_TIMER_DEF(m_key_change_timer_id);
@@ -284,6 +289,10 @@ void ble_stack_init(void)
         err_code = softdevice_enable(&ble_enable_params);
         APP_ERROR_CHECK(err_code);
 
+        // Register BLE event handler
+        err_code = softdevice_ble_evt_handler_set(ble_evt_dispatch);
+        APP_ERROR_CHECK(err_code);
+
     #endif
 }
 
@@ -344,6 +353,92 @@ static void timer_config(void)
     APP_ERROR_CHECK(err_code);
 }
 
+/**
+ * @brief Handler for key write events from the config service.
+ */
+static void on_key_write(config_service_t *p_service, const uint8_t *key_data, uint16_t length)
+{
+    if (length != 28)
+    {
+        COMPAT_NRF_LOG_INFO("Invalid key length: %d", length);
+        return;
+    }
+
+    // Find next available slot
+    int next_slot = last_filled_index + 1;
+    if (next_slot >= MAX_KEYS)
+    {
+        COMPAT_NRF_LOG_INFO("Key storage full, cannot add more keys");
+        return;
+    }
+
+    // Copy key to public_key array
+    memcpy(public_key[next_slot], key_data, 28);
+    last_filled_index = next_slot;
+
+    // Update key count in the service
+    config_service_update_key_count(p_service, (uint16_t)(last_filled_index + 1));
+
+    COMPAT_NRF_LOG_INFO("Key %d written", next_slot);
+}
+
+/**
+ * @brief Timer handler for config mode timeout.
+ */
+static void config_mode_timeout_handler(void *p_context)
+{
+    COMPAT_NRF_LOG_INFO("Config mode timeout, switching to offline mode");
+
+    // Switch to offline finding mode
+    ble_switch_to_offline_mode();
+
+    // Set and advertise the first key
+    set_and_advertise_next_key(NULL);
+
+    // Start key rotation timer if there are multiple keys
+    if (last_filled_index > 0)
+    {
+        timer_config();
+    }
+}
+
+/**
+ * @brief Initialize the configuration service.
+ */
+static void config_service_module_init(void)
+{
+    uint32_t err_code;
+    config_service_t *p_service = ble_get_config_service();
+    config_service_init_t init;
+
+    init.key_write_handler = on_key_write;
+    init.initial_key_count = (uint16_t)(last_filled_index + 1);
+
+    err_code = config_service_init(p_service, &init);
+    APP_ERROR_CHECK(err_code);
+}
+
+/**
+ * @brief Start config mode with timeout timer.
+ */
+static void start_config_mode(void)
+{
+    uint32_t err_code;
+
+    // Create config mode timer
+    err_code = app_timer_create(&m_config_mode_timer_id, APP_TIMER_MODE_SINGLE_SHOT, config_mode_timeout_handler);
+    APP_ERROR_CHECK(err_code);
+
+    // Start config mode timer (30 seconds)
+    err_code = app_timer_start(m_config_mode_timer_id, COMPAT_APP_TIMER_TICKS(CONFIG_MODE_TIMEOUT_MS), NULL);
+    APP_ERROR_CHECK(err_code);
+
+    // Start connectable advertising
+    ble_start_config_advertising();
+
+    COMPAT_NRF_LOG_INFO("Config mode started (30s window)");
+}
+
 
 /**@brief Function for application main entry.
  */
@@ -367,7 +462,7 @@ int main(void)
     }
 
     // Precompute necessary values using integer arithmetic
-    uint32_t rotation_interval_sec = last_filled_index * KEY_ROTATION_INTERVAL;
+    uint32_t rotation_interval_sec = (last_filled_index > 0) ? (last_filled_index * KEY_ROTATION_INTERVAL) : KEY_ROTATION_INTERVAL;
     // Calculate hours scaled by 100 to preserve two decimal places
     uint32_t rotation_interval_hours_scaled = (rotation_interval_sec * 100) / 3600;
     // Calculate rotations per day scaled by 100
@@ -389,20 +484,17 @@ int main(void)
     // Initialize the timer module.
     timers_init();
 
-    // Configure the timer for key rotation if there are multiple keys
-    if (last_filled_index > 0)
-    {
-        timer_config();
-    }
-
     // Initialize the power management module.
     power_management_init();
 
     // Initialize the BLE stack.
     ble_stack_init();
 
-    // Initialize advertising.
-    ble_advertising_init();
+    // Initialize GAP parameters for config mode
+    ble_gap_params_init();
+
+    // Initialize the configuration service
+    config_service_module_init();
 
 #ifdef HAS_RADIO_PA
     // Configure the PA/LNA
@@ -416,10 +508,8 @@ int main(void)
     APP_ERROR_CHECK(err_code);
 #endif
 
-    COMPAT_NRF_LOG_INFO("Starting advertising");
-
-    // Set the first key to be advertised
-    set_and_advertise_next_key(NULL);
+    // Start config mode with 30-second window
+    start_config_mode();
 
     // Enter main loop.
     for (;;)

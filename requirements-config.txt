@@ -1,0 +1,2 @@
+# Requirements for configure_device.py
+bleak>=0.21.0

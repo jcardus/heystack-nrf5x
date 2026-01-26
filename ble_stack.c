@@ -2,11 +2,28 @@
 
 #define APP_BLE_CONN_CFG_TAG            1                                       /**< A tag identifying the SoftDevice BLE configuration. */
 ble_gap_adv_params_t adv_params;
+static ble_gap_scan_params_t m_scan_param;                 /**< Scan parameters requested for scanning and connection. */
+
+#define SCAN_INTERVAL               0x00A0                              /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW                 0x00A0                              /**< Determines scan window in units of 0.625 millisecond. (100% duty cycle) */
+
+// Config mode definitions
+#define DEVICE_NAME                 "HeyStack-Config"
+#define MIN_CONN_INTERVAL           MSEC_TO_UNITS(100, UNIT_1_25_MS)
+#define MAX_CONN_INTERVAL           MSEC_TO_UNITS(200, UNIT_1_25_MS)
+#define SLAVE_LATENCY               0
+#define CONN_SUP_TIMEOUT            MSEC_TO_UNITS(4000, UNIT_10_MS)
+#define CONFIG_ADV_INTERVAL         MSEC_TO_UNITS(100, UNIT_0_625_MS)
 
 #if NRF_SDK_VERSION >= 15
 uint8_t adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
 #else
 #endif
+
+// Module variables for config mode
+static ble_operating_mode_t m_current_mode = BLE_MODE_CONFIG;
+static config_service_t     m_config_service;
+static uint16_t             m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
 uint8_t status_flag = 0;
 uint8_t bt_addr[6] = {0xFF, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
@@ -248,4 +265,259 @@ void set_raw_status(uint8_t raw_status)
 {
 	status_flag = raw_status;
 	_set_status(status_flag);
+}
+
+void scan_start(void)
+{
+    ret_code_t ret;
+
+    m_scan_param.active   = 0;
+    m_scan_param.interval = SCAN_INTERVAL;
+    m_scan_param.window   = SCAN_WINDOW;
+
+
+    #if (NRF_SD_BLE_API_VERSION == 2)
+        m_scan_param.selective   = 0;
+        m_scan_param.p_whitelist = NULL;
+    #endif
+    #if (NRF_SD_BLE_API_VERSION == 3)
+        m_scan_param.use_whitelist  = 0;
+        m_scan_param.adv_dir_report = 0;
+    #endif
+    m_scan_param.timeout  = 0x0000; // No timeout.
+
+    ret = sd_ble_gap_scan_start(&m_scan_param);
+    COMPAT_NRF_LOG_INFO("scan_start ret: %d", ret);
+    APP_ERROR_CHECK(ret);
+
+}
+
+static void on_ble_evt(ble_evt_t * p_ble_evt)
+{
+    COMPAT_NRF_LOG_INFO("on_ble_evt: %d", p_ble_evt->header.evt_id);
+
+    switch (p_ble_evt->header.evt_id)
+    {
+        case BLE_GAP_EVT_CONNECTED:
+            COMPAT_NRF_LOG_INFO("Connected");
+            m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
+            break;
+
+        case BLE_GAP_EVT_DISCONNECTED:
+            COMPAT_NRF_LOG_INFO("Disconnected");
+            m_conn_handle = BLE_CONN_HANDLE_INVALID;
+            break;
+
+        case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
+            // No security required - reject pairing
+            COMPAT_NRF_LOG_INFO("Rejecting pairing request");
+            sd_ble_gap_sec_params_reply(p_ble_evt->evt.gap_evt.conn_handle,
+                                        BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP,
+                                        NULL, NULL);
+            break;
+
+        case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+            // No system attributes stored
+            sd_ble_gatts_sys_attr_set(p_ble_evt->evt.gap_evt.conn_handle, NULL, 0, 0);
+            break;
+
+        case BLE_GAP_EVT_ADV_REPORT:
+        {
+            const ble_gap_evt_adv_report_t * p_adv = &p_ble_evt->evt.gap_evt.params.adv_report;
+
+            COMPAT_NRF_LOG_INFO("ADV: %02x:%02x:%02x:%02x:%02x:%02x",
+                p_adv->peer_addr.addr[5], p_adv->peer_addr.addr[4],
+                p_adv->peer_addr.addr[3], p_adv->peer_addr.addr[2],
+                p_adv->peer_addr.addr[1], p_adv->peer_addr.addr[0]);
+            COMPAT_NRF_LOG_INFO("  RSSI:%d len:%d", p_adv->rssi, p_adv->dlen);
+        } break;
+
+        default:
+            break;
+    }
+}
+
+void ble_evt_dispatch(ble_evt_t * p_ble_evt)
+{
+    COMPAT_NRF_LOG_INFO("BLE evt: %d", p_ble_evt->header.evt_id);
+    on_ble_evt(p_ble_evt);
+
+    // Forward events to config service when in config mode
+    if (m_current_mode == BLE_MODE_CONFIG)
+    {
+        config_service_on_ble_evt(&m_config_service, p_ble_evt);
+    }
+}
+
+/**
+ * @brief Initialize GAP parameters for connectable advertising.
+ */
+void ble_gap_params_init(void)
+{
+    uint32_t                err_code;
+    ble_gap_conn_params_t   gap_conn_params;
+    ble_gap_conn_sec_mode_t sec_mode;
+
+    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
+
+    err_code = sd_ble_gap_device_name_set(&sec_mode,
+                                          (const uint8_t *)DEVICE_NAME,
+                                          strlen(DEVICE_NAME));
+    APP_ERROR_CHECK(err_code);
+
+    memset(&gap_conn_params, 0, sizeof(gap_conn_params));
+
+    gap_conn_params.min_conn_interval = MIN_CONN_INTERVAL;
+    gap_conn_params.max_conn_interval = MAX_CONN_INTERVAL;
+    gap_conn_params.slave_latency     = SLAVE_LATENCY;
+    gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
+
+    err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
+    APP_ERROR_CHECK(err_code);
+
+    COMPAT_NRF_LOG_INFO("GAP params initialized");
+}
+
+/**
+ * @brief Start connectable advertising for configuration mode.
+ */
+void ble_start_config_advertising(void)
+{
+    uint32_t err_code;
+
+    m_current_mode = BLE_MODE_CONFIG;
+
+    #if NRF_SDK_VERSION >= 15
+        // Stop any existing advertising
+        if (adv_handle != BLE_GAP_ADV_SET_HANDLE_NOT_SET)
+        {
+            err_code = sd_ble_gap_adv_stop(adv_handle);
+            if (err_code != NRF_ERROR_INVALID_STATE)
+            {
+                APP_ERROR_CHECK(err_code);
+            }
+        }
+
+        // Set up advertising data
+        static uint8_t adv_data[] = {
+            0x02, 0x01, 0x06,  // Flags: General Discoverable, BR/EDR not supported
+            0x10, 0x09,        // Complete Local Name length and type
+            'H', 'e', 'y', 'S', 't', 'a', 'c', 'k', '-', 'C', 'o', 'n', 'f', 'i', 'g'
+        };
+
+        ble_gap_adv_data_t gap_adv_data;
+        memset(&gap_adv_data, 0, sizeof(gap_adv_data));
+        gap_adv_data.adv_data.p_data = adv_data;
+        gap_adv_data.adv_data.len = sizeof(adv_data);
+
+        // Set up advertising parameters for connectable mode
+        ble_gap_adv_params_t config_adv_params;
+        memset(&config_adv_params, 0, sizeof(config_adv_params));
+        config_adv_params.properties.type = BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
+        config_adv_params.interval = CONFIG_ADV_INTERVAL;
+        config_adv_params.duration = 0;  // No timeout
+        config_adv_params.filter_policy = BLE_GAP_ADV_FP_ANY;
+        config_adv_params.primary_phy = BLE_GAP_PHY_1MBPS;
+
+        err_code = sd_ble_gap_adv_set_configure(&adv_handle, &gap_adv_data, &config_adv_params);
+        APP_ERROR_CHECK(err_code);
+
+        err_code = sd_ble_gap_adv_start(adv_handle, APP_BLE_CONN_CFG_TAG);
+        APP_ERROR_CHECK(err_code);
+    #else
+        // SDK 12 advertising setup
+        ble_advdata_t advdata;
+        memset(&advdata, 0, sizeof(advdata));
+
+        advdata.name_type = BLE_ADVDATA_FULL_NAME;
+        advdata.flags = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
+
+        err_code = ble_advdata_set(&advdata, NULL);
+        APP_ERROR_CHECK(err_code);
+
+        ble_gap_adv_params_t config_adv_params;
+        memset(&config_adv_params, 0, sizeof(config_adv_params));
+        config_adv_params.type = BLE_GAP_ADV_TYPE_ADV_IND;  // Connectable undirected
+        config_adv_params.fp = BLE_GAP_ADV_FP_ANY;
+        config_adv_params.interval = CONFIG_ADV_INTERVAL;
+        config_adv_params.timeout = 0;
+
+        err_code = sd_ble_gap_adv_start(&config_adv_params);
+        APP_ERROR_CHECK(err_code);
+    #endif
+
+    COMPAT_NRF_LOG_INFO("Config advertising started");
+}
+
+/**
+ * @brief Stop advertising.
+ */
+void ble_stop_advertising(void)
+{
+    uint32_t err_code;
+
+    #if NRF_SDK_VERSION >= 15
+        if (adv_handle != BLE_GAP_ADV_SET_HANDLE_NOT_SET)
+        {
+            err_code = sd_ble_gap_adv_stop(adv_handle);
+            if (err_code != NRF_ERROR_INVALID_STATE)
+            {
+                APP_ERROR_CHECK(err_code);
+            }
+        }
+    #else
+        err_code = sd_ble_gap_adv_stop();
+        if (err_code != NRF_ERROR_INVALID_STATE)
+        {
+            APP_ERROR_CHECK(err_code);
+        }
+    #endif
+
+    COMPAT_NRF_LOG_INFO("Advertising stopped");
+}
+
+/**
+ * @brief Switch to offline finding mode (non-connectable).
+ */
+void ble_switch_to_offline_mode(void)
+{
+    uint32_t err_code;
+
+    // Disconnect any active connection
+    if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
+    {
+        err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+        if (err_code != NRF_ERROR_INVALID_STATE)
+        {
+            APP_ERROR_CHECK(err_code);
+        }
+        m_conn_handle = BLE_CONN_HANDLE_INVALID;
+    }
+
+    // Stop config advertising
+    ble_stop_advertising();
+
+    // Update mode
+    m_current_mode = BLE_MODE_OFFLINE;
+
+    // Initialize non-connectable advertising parameters
+    ble_advertising_init();
+
+    COMPAT_NRF_LOG_INFO("Switched to offline mode");
+}
+
+/**
+ * @brief Get the current operating mode.
+ */
+ble_operating_mode_t ble_get_current_mode(void)
+{
+    return m_current_mode;
+}
+
+/**
+ * @brief Get pointer to the config service instance.
+ */
+config_service_t* ble_get_config_service(void)
+{
+    return &m_config_service;
 }

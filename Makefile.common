@@ -145,10 +145,15 @@ help-msg::
 	@echo bmpflash-monitor - monitor the device using Black Magic Probe
 
 define flash_targets
-.PHONY: stflash-$(1)-patched bmpflash-$(1)-patched
+.PHONY: stflash-$(1) stflash-$(1)-patched bmpflash-$(1)-patched
+
+stflash-$(1): merge_$(1)
+	@echo Flashing: $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL).hex
+	openocd -f openocd.cfg -c "init; halt; nrf51 mass_erase; program $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL).hex verify; reset; exit"
+
 stflash-$(1)-patched: patched_$(1)
-	@echo flashing application and softdevice...␍
-	openocd -f openocd.cfg -c "init; halt; nrf51 mass_erase; program $(OUTPUT_DIRECTORY)/$(1)_$(SOFTDEVICE_MODEL)_patched.bin verify; reset; exit";
+	@echo Flashing: $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.bin
+	st-flash write $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.bin 0x0
 
 bmpflash-$(1)-patched: patched_$(1)
 	@printf "  BMP $$(BMP_PORT) (flash)\n"
@@ -162,8 +167,9 @@ bmpflash-$(1)-patched: patched_$(1)
 	           $$(OUTPUT_DIRECTORY)/$(1)_$$(SOFTDEVICE_MODEL)_patched.elf
 
 help-msg::
-	@echo stflash-$(1)-patched - flash $(1) with softdevice for $(1)
-	@echo bmpflash-$(1)-patched - flash $(1) with softdevice for $(1) using Black Magic Probe
+	@echo stflash-$(1) - flash $(1) with softdevice using st-flash
+	@echo stflash-$(1)-patched - flash patched $(1) with softdevice using st-flash
+	@echo bmpflash-$(1)-patched - flash patched $(1) with softdevice using Black Magic Probe
 endef
 
 $(foreach target, $(TARGETS), $(eval $(call flash_targets,$(target))))
