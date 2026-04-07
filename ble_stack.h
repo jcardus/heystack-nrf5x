@@ -39,6 +39,15 @@
 #define STATUS_FLAG_LOW_BATTERY            0b10000000
 #define STATUS_FLAG_CRITICALLY_LOW_BATTERY 0b11000000
 
+#define APPLE_COMPANY_ID   0x004C
+#define GOOGLE_KEY_LENGTH  20
+
+#define KEY_TYPE_APPLE  0
+#define KEY_TYPE_GOOGLE 1
+
+extern char apple_key[28];
+extern char google_key[20];
+
 #ifndef ADVERTISING_INTERVAL
 #define ADVERTISING_INTERVAL 1000
 #endif
@@ -46,4 +55,4 @@
 void ble_advertising_init(void);
 void ble_set_max_tx_power(void);
 void set_battery(uint8_t battery_level);
-uint8_t ble_set_advertisement_key(const char *key);
+uint8_t ble_set_advertisement_key(int key_type);

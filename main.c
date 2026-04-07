@@ -62,14 +62,8 @@
 #endif
 #endif
 
-// Create space for MAX_KEYS public keys
-static const char public_key[MAX_KEYS+1][28] = {
-    [0] = "OFFLINEFINDINGPUBLICKEYHERE!",
-    [MAX_KEYS] = "ENDOFKEYSENDOFKEYSENDOFKEYS!",
-};
-
-int last_filled_index = -1;
-int current_index = 0;
+char apple_key[28] = APPLE_KEY;
+char google_key[20] = GOOGLE_KEY;
 
 // Define timer ID variable
 APP_TIMER_DEF(m_key_change_timer_id);
@@ -181,26 +175,19 @@ void update_battery_level(void)
 
 void set_and_advertise_next_key(void *p_context)
 {
-    #if defined(RANDOM_ROTATE_KEYS) && RANDOM_ROTATE_KEYS == 1
-        // Update key index for next advertisement...Back to zero if out of range
-        current_index =  randmod(last_filled_index + 1);
-    #else
-        // rotate to next key in the list modulo the last filled index
-        current_index = (current_index + 1) % (last_filled_index + 1);
-    #endif
-
-    if (current_index < 0 || current_index > last_filled_index) {
-        COMPAT_NRF_LOG_INFO("Invalid key index: %d", current_index);
-        current_index = 0;
-    }
+    static int use_apple = 1;
 
     #if defined(BATTERY_LEVEL) && BATTERY_LEVEL == 1
         update_battery_level();
     #endif
 
-    // Set key to be advertised
-    ble_set_advertisement_key(public_key[current_index]);
-    COMPAT_NRF_LOG_INFO("Rotating key: %d", current_index);
+    if (use_apple) {
+        ble_set_advertisement_key(KEY_TYPE_APPLE);
+    } else {
+        ble_set_advertisement_key(KEY_TYPE_GOOGLE);
+    }
+
+    use_apple = !use_apple;
 }
 
 /**@brief Function for assert macro callback.
@@ -356,44 +343,13 @@ int main(void)
         es_battery_voltage_init();
     #endif
 
-    // Find the last filled index
-    for (int i = MAX_KEYS - 2; i >= 0; i--)
-    {
-        if (strlen(public_key[i]) > 0)
-        {
-            last_filled_index = i;
-            break;
-        }
-    }
-
-    // Precompute necessary values using integer arithmetic
-    uint32_t rotation_interval_sec = last_filled_index * KEY_ROTATION_INTERVAL;
-    // Calculate hours scaled by 100 to preserve two decimal places
-    uint32_t rotation_interval_hours_scaled = (rotation_interval_sec * 100) / 3600;
-    // Calculate rotations per day scaled by 100
-    uint32_t rotation_per_day_scaled = (86400 * 100) / rotation_interval_sec;
-
-    // Log the information
-    COMPAT_NRF_LOG_INFO("[KEYS] Last filled index: %d", last_filled_index);
-
-    COMPAT_NRF_LOG_INFO("[TIMING] Full key rotation interval: %d seconds (%d.%02d hours)",
-                    rotation_interval_sec,
-                    rotation_interval_hours_scaled / 100,
-                    rotation_interval_hours_scaled % 100);
-
-    COMPAT_NRF_LOG_INFO("[TIMING] Rotation per Day: %d.%02d",
-                    rotation_per_day_scaled / 100,
-                    rotation_per_day_scaled % 100);
+    COMPAT_NRF_LOG_INFO("[TIMING] Key rotation interval: %d seconds", KEY_ROTATION_INTERVAL);
 
 
     // Initialize the timer module.
     timers_init();
 
-    // Configure the timer for key rotation if there are multiple keys
-    if (last_filled_index > 0)
-    {
-        timer_config();
-    }
+    timer_config();
 
     // Initialize the power management module.
     power_management_init();

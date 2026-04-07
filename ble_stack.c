@@ -10,19 +10,8 @@ uint8_t adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
 
 uint8_t status_flag = 0;
 uint8_t bt_addr[6] = {0xFF, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
-uint8_t offline_finding_adv[] = {
-	0x1e,		/* Length (30) */
-	0xff,		/* Manufacturer Specific Data (type 0xff) */
-	0x4c, 0x00, /* Company ID (Apple) */
-	0x12, 0x19, /* Offline Finding type and length */
-	0x00,		/* State */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, /* First two bits */
-	0x00, /* Hint (0x00) */
-};
-size_t offline_finding_adv_len = sizeof(offline_finding_adv);
+static uint8_t adv_buf[31];
+static size_t adv_buf_len = 0;
 
 
 // Set maximum transmit power for advertising or connection
@@ -80,15 +69,6 @@ static void set_addr_from_key(const char *key)
 	bt_addr[2] = key[3];
 	bt_addr[1] = key[4];
 	bt_addr[0] = key[5];
-}
-
-/*
- * fill_adv_template_from_key will set the advertising data based on the remaining bytes from the advertised key
- */
-static void fill_adv_template_from_key(const char *key)
-{
-	memcpy(&offline_finding_adv[7], &key[6], 22);
-	offline_finding_adv[29] = key[0] >> 6;
 }
 
 /**
@@ -162,61 +142,87 @@ void ble_advertising_init(void)
 }
 
 /*
- * set_advertisement_key will setup the key to be advertised
+ * ble_set_advertisement_key will setup the key to be advertised
  *
- * @param[in] key public key to be advertised
+ * @param[in] key_type  KEY_TYPE_APPLE or KEY_TYPE_GOOGLE
  *
- * @returns raw data size
+ * @returns advertisement data size
  */
-uint8_t ble_set_advertisement_key(const char *key)
+uint8_t ble_set_advertisement_key(int key_type)
 {
+    size_t adv_len = 0;
 
     #if NRF_SDK_VERSION >= 15
         if (adv_handle != BLE_GAP_ADV_SET_HANDLE_NOT_SET) {
             int err_code = sd_ble_gap_adv_stop(adv_handle);
-            if (err_code != NRF_ERROR_INVALID_STATE) // Invalid state is fine if no advertisement is running
-            {
+            if (err_code != NRF_ERROR_INVALID_STATE)
                 APP_ERROR_CHECK(err_code);
-            }
         }
     #endif
 
-    set_addr_from_key(key);
-   	fill_adv_template_from_key(key);
+    if (key_type == KEY_TYPE_APPLE)
+    {
+        set_addr_from_key(apple_key);
 
-	ble_set_mac_address(bt_addr);
+        adv_buf[adv_len++] = 0x1e;
+        adv_buf[adv_len++] = 0xFF;
+        adv_buf[adv_len++] = APPLE_COMPANY_ID & 0xFF;
+        adv_buf[adv_len++] = (APPLE_COMPANY_ID >> 8) & 0xFF;
+        adv_buf[adv_len++] = 0x12;
+        adv_buf[adv_len++] = 0x19;
+        adv_buf[adv_len++] = status_flag;
+        memcpy(&adv_buf[adv_len], &apple_key[6], 22);
+        adv_len += 22;
+        adv_buf[adv_len++] = apple_key[0] >> 6;
+        adv_buf[adv_len++] = 0x00;
+        NRF_LOG_INFO("Advertising Apple key\r\n");
+    }
+    else
+    {
+        adv_buf[adv_len++] = 0x02;
+        adv_buf[adv_len++] = 0x01;
+        adv_buf[adv_len++] = 0x06;
+        adv_buf[adv_len++] = 0x19;
+        adv_buf[adv_len++] = 0x16;
+        adv_buf[adv_len++] = 0xAA;
+        adv_buf[adv_len++] = 0xFE;
+        adv_buf[adv_len++] = 0x40;
+        memcpy(&adv_buf[adv_len], google_key, GOOGLE_KEY_LENGTH);
+        adv_len += GOOGLE_KEY_LENGTH;
+        adv_buf[adv_len++] = 0x00;
+        NRF_LOG_INFO("Advertising Google FMDN key\r\n");
+    }
+
+    adv_buf_len = adv_len;
+
+    ble_set_mac_address(bt_addr);
 
     #if NRF_SDK_VERSION >= 15
-        // Set advertising data
-	    ble_gap_adv_data_t adv_data;
+        ble_gap_adv_data_t adv_data;
         memset(&adv_data, 0, sizeof(adv_data));
-        // Set advertising data
-        adv_data.adv_data.p_data = offline_finding_adv;
-        adv_data.adv_data.len = offline_finding_adv_len;
-        // No scan response data in this case (NULL and length 0).
+        adv_data.adv_data.p_data = adv_buf;
+        adv_data.adv_data.len = adv_buf_len;
         adv_data.scan_rsp_data.p_data = NULL;
         adv_data.scan_rsp_data.len = 0;
-        // Initialize advertising parameters as before (assumed to be done previously)
         uint32_t err_code = sd_ble_gap_adv_set_configure(&adv_handle, &adv_data, &adv_params);
         APP_ERROR_CHECK(err_code);
-
-        // Start advertising (also assumed done previously)
         err_code = sd_ble_gap_adv_start(adv_handle, APP_BLE_CONN_CFG_TAG);
         APP_ERROR_CHECK(err_code);
     #else
-        uint32_t err_code = sd_ble_gap_adv_data_set(offline_finding_adv, offline_finding_adv_len, NULL, 0);
-	    APP_ERROR_CHECK(err_code);
+        uint32_t err_code = sd_ble_gap_adv_data_set(adv_buf, adv_buf_len, NULL, 0);
+        APP_ERROR_CHECK(err_code);
     #endif
 
-    // Set the maximum transmit power for advertising.
     ble_set_max_tx_power();
 
-	return offline_finding_adv_len;
+    return adv_buf_len;
 }
 
 void _set_status(uint8_t status)
 {
-	offline_finding_adv[6] = status;
+    // byte 6 is the status field in the Apple advertisement
+    if (adv_buf_len > 6)
+        adv_buf[6] = status;
 }
 
 void set_battery(uint8_t battery_level)
