@@ -54,5 +54,5 @@ extern char google_key[20];
 
 void ble_advertising_init(void);
 void ble_set_max_tx_power(void);
-void set_battery(uint8_t battery_level);
+void set_battery(uint16_t mv);
 uint8_t ble_set_advertisement_key(int key_type);

@@ -13,7 +13,7 @@
 
 #ifndef KEY_ROTATION_INTERVAL
 // Key rotation interval in seconds
-#define KEY_ROTATION_INTERVAL 300
+#define KEY_ROTATION_INTERVAL 60
 #endif
 
 #if NRF_SDK_VERSION < 15

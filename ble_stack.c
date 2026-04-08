@@ -225,21 +225,13 @@ void _set_status(uint8_t status)
         adv_buf[6] = status;
 }
 
-void set_battery(uint8_t battery_level)
+void set_battery(uint16_t mv)
 {
-    status_flag &= (~STATUS_FLAG_BATTERY_MASK);
-    if(battery_level > 80){
-        // do nothing
-    }else if(battery_level > 50){
-        status_flag |= STATUS_FLAG_MEDIUM_BATTERY;
-    }else if(battery_level > 30){
-        status_flag |= STATUS_FLAG_LOW_BATTERY;
-    }else{
-        status_flag |= STATUS_FLAG_CRITICALLY_LOW_BATTERY;
-    }
-    COMPAT_NRF_LOG_INFO("Battery level: %d, status: %d%d",
-            battery_level, (status_flag >> 7) & 1, (status_flag >> 6) & 1);
-	_set_status(status_flag);
+    uint16_t encoded = (mv > 2000) ? (mv - 2000) / 10 : 0;
+    if (encoded > 255) encoded = 255;
+    status_flag = (uint8_t)encoded;
+    COMPAT_NRF_LOG_INFO("Battery: %d mV, encoded: %d", mv, status_flag);
+    _set_status(status_flag);
 }
 
 void set_status(uint8_t status)

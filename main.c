@@ -144,27 +144,15 @@ static void pa_lna_assist(uint32_t gpio_pa_pin, uint32_t gpio_lna_pin)
 #define BATTERY_VOLTAGE_MAX (3300.0)
 #define ROTATION_PER_DAY ((24 * 60 * 60) / KEY_ROTATION_INTERVAL)
 
-uint8_t read_nrf_battery_voltage_percent(void)
-{
-    uint16_t real_vbatt;
-    es_battery_voltage_get(&real_vbatt);
-
-    uint16_t vbatt = MIN(real_vbatt, BATTERY_VOLTAGE_MAX);
-    vbatt = (vbatt - BATTERY_VOLTAGE_MIN) / (BATTERY_VOLTAGE_MAX - BATTERY_VOLTAGE_MIN) * 100;
-
-    COMPAT_NRF_LOG_INFO("Battery voltage: %d mV, %d%% (min: %d mV, max: %d mV)", real_vbatt, vbatt, BATTERY_VOLTAGE_MIN, BATTERY_VOLTAGE_MAX);
-
-    return vbatt;
-}
-
 void update_battery_level(void)
 {
     static uint32_t rotation = 0;
 
     if (rotation == 0) {
         COMPAT_NRF_LOG_INFO("Updating battery level: %d / %d", rotation, ROTATION_PER_DAY);
-        uint8_t battery_level = read_nrf_battery_voltage_percent();
-        set_battery(battery_level);
+        uint16_t real_vbatt;
+        es_battery_voltage_get(&real_vbatt);
+        set_battery(real_vbatt);
     } else {
         COMPAT_NRF_LOG_INFO("Skipping battery level update: %d / %d", rotation, ROTATION_PER_DAY);
     }
