@@ -56,3 +56,4 @@ void ble_advertising_init(void);
 void ble_set_max_tx_power(void);
 void set_battery(uint16_t mv);
 uint8_t ble_set_advertisement_key(int key_type);
+void ble_factory_mode_end(void);

@@ -13,6 +13,21 @@ uint8_t bt_addr[6] = {0xFF, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
 static uint8_t adv_buf[31];
 static size_t adv_buf_len = 0;
 
+static uint8_t scan_rsp_buf[31];
+static uint8_t scan_rsp_len = 0;
+static bool factory_mode = true;
+
+static void build_scan_response(void)
+{
+    size_t name_len = strlen(DEVICE_NAME);
+    if (name_len > sizeof(scan_rsp_buf) - 2) {
+        name_len = sizeof(scan_rsp_buf) - 2;
+    }
+    scan_rsp_buf[0] = (uint8_t)(name_len + 1);
+    scan_rsp_buf[1] = 0x09;
+    memcpy(&scan_rsp_buf[2], DEVICE_NAME, name_len);
+    scan_rsp_len = (uint8_t)(name_len + 2);
+}
 
 // Set maximum transmit power for advertising or connection
 void ble_set_max_tx_power(void)
@@ -110,11 +125,17 @@ static void ble_set_mac_address(uint8_t *addr)
  */
 void ble_advertising_init(void)
 {
+    ble_gap_conn_sec_mode_t sec_mode;
+    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
+    uint32_t name_err = sd_ble_gap_device_name_set(&sec_mode,
+                                                  (const uint8_t *)DEVICE_NAME,
+                                                  strlen(DEVICE_NAME));
+    APP_ERROR_CHECK(name_err);
+    build_scan_response();
     memset(&adv_params, 0, sizeof(adv_params));
 
     #if NRF_SDK_VERSION >= 15
-        // Set the advertising type to non-connectable.
-        adv_params.properties.type = BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+        adv_params.properties.type = BLE_GAP_ADV_TYPE_NONCONNECTABLE_SCANNABLE_UNDIRECTED;
         // Set advertising interval (in 0.625 ms units).
         adv_params.interval = MSEC_TO_UNITS(ADVERTISING_INTERVAL, UNIT_0_625_MS);
         // Set advertising timeout to zero (no timeout).
@@ -131,7 +152,7 @@ void ble_advertising_init(void)
         APP_ERROR_CHECK(err_code);
     #else
         // Set the advertising parameters.
-        adv_params.type = BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+        adv_params.type = BLE_GAP_ADV_TYPE_ADV_SCAN_IND;
         adv_params.p_peer_addr = NULL;
         adv_params.fp = BLE_GAP_ADV_FP_ANY;
         // Set the advertising interval (in units of 0.625 ms).
@@ -202,20 +223,51 @@ uint8_t ble_set_advertisement_key(int key_type)
         memset(&adv_data, 0, sizeof(adv_data));
         adv_data.adv_data.p_data = adv_buf;
         adv_data.adv_data.len = adv_buf_len;
-        adv_data.scan_rsp_data.p_data = NULL;
-        adv_data.scan_rsp_data.len = 0;
+        if (factory_mode) {
+            adv_data.scan_rsp_data.p_data = scan_rsp_buf;
+            adv_data.scan_rsp_data.len = scan_rsp_len;
+        } else {
+            adv_data.scan_rsp_data.p_data = NULL;
+            adv_data.scan_rsp_data.len = 0;
+        }
         uint32_t err_code = sd_ble_gap_adv_set_configure(&adv_handle, &adv_data, &adv_params);
         APP_ERROR_CHECK(err_code);
         err_code = sd_ble_gap_adv_start(adv_handle, APP_BLE_CONN_CFG_TAG);
         APP_ERROR_CHECK(err_code);
     #else
-        uint32_t err_code = sd_ble_gap_adv_data_set(adv_buf, adv_buf_len, NULL, 0);
+        uint32_t err_code = factory_mode
+            ? sd_ble_gap_adv_data_set(adv_buf, adv_buf_len, scan_rsp_buf, scan_rsp_len)
+            : sd_ble_gap_adv_data_set(adv_buf, adv_buf_len, NULL, 0);
         APP_ERROR_CHECK(err_code);
     #endif
 
     ble_set_max_tx_power();
 
     return adv_buf_len;
+}
+
+void ble_factory_mode_end(void)
+{
+    if (!factory_mode) return;
+    factory_mode = false;
+
+    memset(&adv_params, 0, sizeof(adv_params));
+    #if NRF_SDK_VERSION >= 15
+        adv_params.properties.type = BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+        adv_params.interval = MSEC_TO_UNITS(ADVERTISING_INTERVAL, UNIT_0_625_MS);
+        adv_params.duration = 0;
+        adv_params.filter_policy = BLE_GAP_ADV_FP_ANY;
+        adv_params.p_peer_addr = NULL;
+        adv_params.primary_phy = BLE_GAP_PHY_1MBPS;
+    #else
+        adv_params.type = BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+        adv_params.p_peer_addr = NULL;
+        adv_params.fp = BLE_GAP_ADV_FP_ANY;
+        adv_params.interval = MSEC_TO_UNITS(ADVERTISING_INTERVAL, UNIT_0_625_MS);
+        adv_params.timeout = 0;
+    #endif
+
+    NRF_LOG_INFO("Factory mode ended\r\n");
 }
 
 void _set_status(uint8_t status)

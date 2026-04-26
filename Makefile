@@ -23,8 +23,11 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all        - build all targets"
-	@echo "  clean      - clean all targets"
+	@echo "  all              - build all targets"
+	@echo "  clean            - clean all targets"
+	@echo "  <target>         - build a specific target (e.g. nrf52810_xxaa-dcdc)"
+	@echo "  <target>-clean   - clean a specific target"
+	@echo "  <target>-flash   - build & flash via OpenOCD (ST-Link), e.g. make nrf52810_xxaa-dcdc-flash"
 
 # Define a recipe to build each target individually
 define build_target
@@ -42,6 +45,7 @@ $(1):
 		KEY_ROTATION_INTERVAL=$(KEY_ROTATION_INTERVAL) \
 		ADVERTISING_INTERVAL=$(ADVERTISING_INTERVAL) \
 		RANDOM_ROTATE_KEYS=$(RANDOM_ROTATE_KEYS) \
+		$(if $(DEVICE_NAME),DEVICE_NAME='$(DEVICE_NAME)') \
 		$(1) bin_$(1)
 
 	mkdir -p ./release
@@ -59,6 +63,19 @@ $(1):
 $(1)-clean:
 	$$(MAKE) -C $$(DIR_$(1))/armgcc clean \
 		GNU_INSTALL_ROOT=$$(if $$(findstring nrf51,$$(DIR_$(1))),$$(GNU_INSTALL_ROOT),$$(GNU_INSTALL_ROOT)/bin/)
+
+.PHONY: $(1)-flash
+$(1)-flash:
+	$$(MAKE) -C $$(DIR_$(1))/armgcc \
+		GNU_INSTALL_ROOT=$$(if $$(findstring nrf51,$$(DIR_$(1))),$$(GNU_INSTALL_ROOT)/,$$(GNU_INSTALL_ROOT)/bin/) \
+		MAX_KEYS=$(MAX_KEYS) \
+		HAS_DEBUG=$(HAS_DEBUG) \
+		HAS_BATTERY=$(HAS_BATTERY) \
+		KEY_ROTATION_INTERVAL=$(KEY_ROTATION_INTERVAL) \
+		ADVERTISING_INTERVAL=$(ADVERTISING_INTERVAL) \
+		RANDOM_ROTATE_KEYS=$(RANDOM_ROTATE_KEYS) \
+		$(if $(DEVICE_NAME),DEVICE_NAME='$(DEVICE_NAME)') \
+		stflash-$(1)
 
 endef
 

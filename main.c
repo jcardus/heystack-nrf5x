@@ -176,6 +176,10 @@ void set_and_advertise_next_key(void *p_context)
     }
 
     use_apple = !use_apple;
+
+    // After the first advertise (which uses scannable factory params), drop
+    // factory mode so subsequent rotations are non-scannable. No-op after first call.
+    ble_factory_mode_end();
 }
 
 /**@brief Function for assert macro callback.
