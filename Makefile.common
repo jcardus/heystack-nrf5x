@@ -48,24 +48,27 @@ ifneq ($(ADVERTISING_INTERVAL), 0)
 	ASMFLAGS += -DADVERTISING_INTERVAL=$(ADVERTISING_INTERVAL)
 endif
 
+# Only warn about missing keys when actually building (skip on clean-only goals).
+WARN_DEFAULTS := $(if $(filter-out clean,$(or $(MAKECMDGOALS),build)),1,)
+
 ifndef APPLE_KEY
-$(warning APPLE_KEY not set, using placeholder 0xFF*28. Pass APPLE_KEY='"\xXX..."' for a real key.)
+$(if $(WARN_DEFAULTS),$(warning APPLE_KEY not set, using placeholder 0xFF*28. Pass APPLE_KEY='"\xXX..."' for a real key.))
 APPLE_KEY := "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
 endif
 CFLAGS += -DAPPLE_KEY='$(APPLE_KEY)'
 
 ifndef GOOGLE_KEY
-$(warning GOOGLE_KEY not set, using placeholder 0xFF*20. Pass GOOGLE_KEY='"\xXX..."' for a real key.)
+$(if $(WARN_DEFAULTS),$(warning GOOGLE_KEY not set, using placeholder 0xFF*20. Pass GOOGLE_KEY='"\xXX..."' for a real key.))
 GOOGLE_KEY := "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
 endif
 CFLAGS += -DGOOGLE_KEY='$(GOOGLE_KEY)'
 
 ifndef DEVICE_NAME
-$(warning DEVICE_NAME not set, using placeholder "heystack". Pass DEVICE_NAME='"YourName"' for production.)
-DEVICE_NAME := "heystack"
+$(if $(WARN_DEFAULTS),$(warning DEVICE_NAME not set, using placeholder heystack. Pass DEVICE_NAME=YourName for production.))
+DEVICE_NAME := heystack
 endif
-CFLAGS += -DDEVICE_NAME='$(DEVICE_NAME)'
-ASMFLAGS += -DDEVICE_NAME='$(DEVICE_NAME)'
+CFLAGS += -DDEVICE_NAME='"$(DEVICE_NAME)"'
+ASMFLAGS += -DDEVICE_NAME='"$(DEVICE_NAME)"'
 
 ifeq ($(BOARD), )
 	override BOARD = custom_board
